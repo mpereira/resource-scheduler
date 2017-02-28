@@ -95,24 +95,30 @@
 (defn step-nodes [scheduler]
   (update scheduler :nodes (partial map-vals node-step)))
 
-(defn scheduler-step [{:keys [nodes jobs] :as scheduler}]
-  (if-let [{:keys [required-resource-units time-steps-required] :as job}
-           (peek jobs)]
-    (if-let [node (first-with-sufficient-resource-units nodes job)]
-      (-> scheduler
-          (step-nodes)
-          (start-job node job))
+(defprotocol Scheduler
+  (step [this] "Advances the scheduler 1 step in time"))
+
+(defrecord FirstComeFirstServedScheduler []
+  Scheduler
+  (step [{:keys [nodes jobs] :as scheduler}]
+    (if-let [{:keys [required-resource-units time-steps-required] :as job}
+             (peek jobs)]
+      (if-let [node (first-with-sufficient-resource-units nodes job)]
+        (-> scheduler
+            (step-nodes)
+            (start-job node job))
+        (do
+          (println "[scheduler] - No resources to schedule" job "- waiting")
+          (step-nodes scheduler)))
       (do
-        (println "[scheduler] - No resources to schedule" job "- waiting")
-        (step-nodes scheduler)))
-    (do
-      (println "[scheduler] - Idle")
-      (step-nodes scheduler))))
+        (println "[scheduler] - Idle")
+        (step-nodes scheduler)))))
 
 (defn -main
   [nodes-description jobs-description & args]
-  (let [{:keys [jobs nodes] :as scheduler} {:nodes (parse-nodes nodes-description)
-                                            :jobs (parse-jobs jobs-description)}]
+  (let [{:keys [jobs nodes] :as scheduler} (map->FirstComeFirstServedScheduler
+                                            {:nodes (parse-nodes nodes-description)
+                                             :jobs (parse-jobs jobs-description)})]
     (if (seq jobs)
       (do
         (println "Job queue:" (count jobs))
@@ -124,7 +130,7 @@
         (println (table [:id :resource-units {:name :jobs :when false}]
                         (vals nodes))))
       (println "\nNo nodes available"))
-    (doseq [[i {:keys [nodes jobs]}] (->> (iterate scheduler-step scheduler)
+    (doseq [[i {:keys [nodes jobs]}] (->> (iterate step scheduler)
                                           (take-while scheduler-busy?)
                                           (map vector (range)))]
       (println "\nStep" (inc i)))))
