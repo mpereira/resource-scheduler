@@ -3,6 +3,7 @@
 Resource scheduling strategy simulation.
 
 The current scheduler implementation has the following assumptions:
+
 1. The scheduler can start 1 job per time step
 2. The simulation is finished when all jobs finish
 
@@ -10,7 +11,7 @@ The currently available scheduling strategies are "first-come-first-served" and 
 
 ## Strategies
 
-### First Come First Served Scheduler
+### First Come First Served Strategy
 
 This strategy consumes jobs as if they were a queue (FIFO) in each time
 step. This is not optimal since large jobs that can't be run due to unavailable
@@ -47,13 +48,17 @@ $ java -jar target/uberjar/resource-scheduler-0.1.0-SNAPSHOT-standalone.jar $sch
 
 Small example:
 
-2 nodes:
-- node 1 with 4 resource units
-- node 2 with 5 resource units
+- first-come-first-served strategy
 
-2 jobs:
-- first job needs 3 resource units for 2 time steps
-- second job needs 4 resource units for 3 time steps
+- 2 nodes:
+
+  - node 1 with 4 resource units
+  - node 2 with 5 resource units
+
+- 2 jobs:
+
+  - first job needs 3 resource units for 2 time steps
+  - second job needs 4 resource units for 3 time steps
 
 ```
 $ java -jar target/uberjar/resource-scheduler-0.1.0-SNAPSHOT-standalone.jar first-come-first-served "(1 4) (2 5)" "(3 2) (4 3)"
@@ -100,6 +105,7 @@ So we see that the simulation took 5 time steps.
 ## Running a Simulation
 
 Node stream: `(2 3) (7 1) (1 10) (8 5) (2 8)`
+
 Job stream:  `(3 4) (1 4) (4 7) (1 3) (5 4) (9 3)`
 
 Running a "first-come-first-served" simulation:
