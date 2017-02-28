@@ -40,10 +40,6 @@
   [{:keys [resource-units jobs] :as node}]
   (- resource-units (resource-units-being-used node)))
 
-(defn full-capacity?
-  [{:keys [resource-units] :as node}]
-  (<= resource-units (resource-units-being-used node)))
-
 (defn sufficient-resource-units?
   [{:keys [required-resource-units] :as job}
    {:keys [resource-units] :as node}]
