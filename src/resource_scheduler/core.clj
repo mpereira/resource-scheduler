@@ -29,8 +29,7 @@
 (defn parse-jobs [jobs-description]
   (->> jobs-description
        (parse)
-       (map (partial zipmap [:required-resource-units :time-steps-required]))
-       (queue)))
+       (map (partial zipmap [:required-resource-units :time-steps-required]))))
 
 (defn resource-units-being-used
   [{:keys [resource-units jobs] :as node}]
@@ -47,15 +46,6 @@
 
 (defn first-with-sufficient-resource-units [nodes job]
   (first (filter (partial sufficient-resource-units? job) (vals nodes))))
-
-(defn start-job [scheduler {:keys [id] :as node} job]
-  (println "[scheduler] - Starting job" job "on node" id
-           (str "(remaining resource units: " (remaining-resource-units node) ")"))
-  (-> scheduler
-      (update-in [:jobs] pop)
-      (update-in [:nodes id] update :jobs conj (assoc job
-                                                      :time-steps-taken 0
-                                                      :node-id id))))
 
 (defn steps-to-go [{:keys [time-steps-taken time-steps-required] :as job}]
   (- time-steps-required time-steps-taken))
@@ -96,41 +86,107 @@
   (update scheduler :nodes (partial map-vals node-step)))
 
 (defprotocol Scheduler
-  (step [this] "Advances the scheduler 1 step in time"))
+  (step [this] "Advances the scheduler 1 step in time")
+  (start-job [this node job] "Starts job in node"))
 
 (defrecord FirstComeFirstServedScheduler []
   Scheduler
-  (step [{:keys [nodes jobs] :as scheduler}]
+  (step [{:keys [nodes jobs] :as this}]
     (if-let [{:keys [required-resource-units time-steps-required] :as job}
              (peek jobs)]
       (if-let [node (first-with-sufficient-resource-units nodes job)]
-        (-> scheduler
+        (-> this
             (step-nodes)
             (start-job node job))
         (do
           (println "[scheduler] - No resources to schedule" job "- waiting")
-          (step-nodes scheduler)))
+          (step-nodes this)))
       (do
         (println "[scheduler] - Idle")
-        (step-nodes scheduler)))))
+        (step-nodes this))))
+
+  (start-job [this {:keys [id] :as node} job]
+    (println "[scheduler] - Starting job" job "on node" id
+             (str "(remaining resource units: " (remaining-resource-units node) ")"))
+    (-> this
+        (update-in [:jobs] pop)
+        (update-in [:nodes id] update :jobs conj (assoc job
+                                                        :time-steps-taken 0
+                                                        :node-id id)))))
+
+(defn first-job-and-node-with-sufficient-resource-units
+  [{:keys [nodes jobs] :as scheduler}]
+  (first (for [job jobs
+               node (vals nodes)
+               :when (sufficient-resource-units? job node)]
+           [job node])))
+
+(defrecord SmartScheduler []
+  Scheduler
+  (step [{:keys [nodes jobs] :as this}]
+    (if (seq jobs)
+      (if-let [[{:keys [required-resource-units time-steps-required] :as job}
+                node]
+               (first-job-and-node-with-sufficient-resource-units this)]
+        (-> this
+            (step-nodes)
+            (start-job node job))
+        (do
+          (println "[scheduler] - No resources to schedule jobs - waiting")
+          (step-nodes this)))
+      (do
+        (println "[scheduler] - Idle")
+        (step-nodes this))))
+
+  (start-job [this {:keys [id] :as node} job]
+    (println "[scheduler] - Starting job" job "on node" id
+             (str "(remaining resource units: " (remaining-resource-units node) ")"))
+    (-> this
+        (update-in [:jobs] disj job)
+        (update-in [:nodes id] update :jobs conj (assoc job
+                                                        :time-steps-taken 0
+                                                        :node-id id)))))
+
+(defn make-first-come-first-served-scheduler [{:keys [jobs nodes]}]
+  (map->FirstComeFirstServedScheduler {:nodes nodes
+                                       :jobs (queue jobs)}))
+
+(defn make-smart-scheduler [{:keys [jobs nodes]}]
+  (map->SmartScheduler {:nodes nodes
+                        :jobs (set jobs)}))
+
+(def scheduler-types #{"first-come-first-served" "smart"})
 
 (defn -main
-  [nodes-description jobs-description & args]
-  (let [{:keys [jobs nodes] :as scheduler} (map->FirstComeFirstServedScheduler
-                                            {:nodes (parse-nodes nodes-description)
-                                             :jobs (parse-jobs jobs-description)})]
-    (if (seq jobs)
-      (do
-        (println "Job queue:" (count jobs))
-        (println (table jobs)))
-      (println "Job queue empty"))
-    (if (seq nodes)
-      (do
-        (println "\nNodes:" (count nodes))
-        (println (table [:id :resource-units {:name :jobs :when false}]
-                        (vals nodes))))
-      (println "\nNo nodes available"))
-    (doseq [[i {:keys [nodes jobs]}] (->> (iterate step scheduler)
-                                          (take-while scheduler-busy?)
-                                          (map vector (range)))]
-      (println "\nStep" (inc i)))))
+  [scheduler-type nodes-description jobs-description & args]
+  (if (contains? scheduler-types scheduler-type)
+    (let [make-scheduler-fn
+          (get {"first-come-first-served" make-first-come-first-served-scheduler
+                "smart" make-smart-scheduler}
+               scheduler-type)
+          {:keys [jobs nodes] :as scheduler}
+          (make-scheduler-fn {:nodes (parse-nodes nodes-description)
+                              :jobs (parse-jobs jobs-description)})]
+      (if (seq jobs)
+        (do
+          (println "Job queue:" (count jobs))
+          (println (table jobs)))
+        (println "Job queue empty"))
+      (if (seq nodes)
+        (do
+          (println "\nNodes:" (count nodes))
+          (println (table [:id :resource-units {:name :jobs :when false}]
+                          (vals nodes))))
+        (println "\nNo nodes available"))
+      (doseq [[i {:keys [nodes jobs]}] (->> (iterate step scheduler)
+                                            (take-while scheduler-busy?)
+                                            (map vector (range)))]
+        (println "\nStep" (inc i))))
+    (do
+      (println "Invalid scheduler type:" scheduler-type)
+      (println "Must be one of" scheduler-types))))
+
+(comment
+  (-main "smart"
+         "(2 3) (7 1) (1 10) (8 5) (2 8)"
+         "(3 4) (1 4) (4 7) (1 3) (5 4) (9 3)"))
