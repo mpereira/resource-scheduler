@@ -30,6 +30,12 @@ scheduler.
 - Java
 - Leiningen
 
+or
+
+- Docker
+
+if you're running it with docker.
+
 ## Installation
 
 ```
@@ -37,13 +43,25 @@ $ git clone https://mpereira@bitbucket.org/mpereira/resource-scheduler.git
 $ lein uberjar
 ```
 
-## Usage
+or
+
+```
+$ docker pull mpereira/resource-scheduler
+```
+
+### Usage
 
 This will first output the scheduler topology: nodes and jobs, and then output
 scheduler steps with per-step actions, until all jobs finish.
 
 ```
 $ java -jar target/uberjar/resource-scheduler-0.1.0-SNAPSHOT-standalone.jar $scheduler-type $node-stream $job-stream
+```
+
+or
+
+```
+$ docker run mpereira/resource-scheduler $scheduler-type $node-stream $job-stream
 ```
 
 Small example:
@@ -132,7 +150,7 @@ jobs.
 
 ## TODO
 
-- [ ] Docker image
+- [x] Docker image
 - [ ] Break core namespace into smaller namespaces
 - [ ] Tests
 - [ ] Show resource usage statistics at the end (total/average resource idleness, etc.)
